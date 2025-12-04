@@ -6,6 +6,7 @@ import requests
 import sparkmagic.utils.configuration as conf
 from sparkmagic.utils.sparklogger import SparkLog
 from .exceptions import HttpClientException, HttpSessionAdapterConfigException
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 import importlib
 
 
@@ -49,10 +50,53 @@ class ReliableHttpClient(object):
     def get_headers(self):
         return self._headers
 
-    def compose_url(self, relative_url):
-        r_u = "/{}".format(relative_url.rstrip("/").lstrip("/"))
-        return self._endpoint.url + r_u
-
+    def compose_url(self, relative_url: str):
+        """
+        Composes a full URL by appending the relative path to the base URL's path
+        and merging query parameters.
+        
+        Args:
+            self: The client instance (expected to have self._endpoint.url).
+            relative_url (str): The relative URL or path (e.g., 'resource?id=1').
+            
+        Returns:
+            str: The combined URL.
+        """
+        # Access the base URL from the instance as in the original function
+        base_url = self._endpoint.url
+        
+        base = urlparse(base_url)
+        rel = urlparse(relative_url)
+    
+        # 1. Combine Paths
+        # Append relative path to base path, ensuring single slash separator
+        base_path = base.path.rstrip('/')
+        rel_path = rel.path.lstrip('/')
+        
+        if base_path and rel_path:
+            new_path = f"{base_path}/{rel_path}"
+        else:
+            new_path = base_path or rel_path
+            # Preserve root slash if base was just root and no relative path
+            if not new_path and base.path == '/':
+                new_path = '/'
+    
+        # 2. Merge Query Parameters
+        # Parse both query strings, combine them (Base + Relative), and re-encode
+        # This handles special characters and ensures valid query strings
+        combined_qs = parse_qsl(base.query) + parse_qsl(rel.query)
+        new_query = urlencode(combined_qs)
+    
+        # 3. Reconstruct URL
+        return urlunparse((
+            base.scheme,
+            base.netloc,
+            new_path,
+            base.params,
+            new_query,
+            rel.fragment or base.fragment
+        ))
+        
     def get(self, relative_url, accepted_status_codes):
         """Sends a get request. Returns a response."""
         return self._send_request(
