@@ -59,6 +59,38 @@ def test_compose_url():
     composed = client.compose_url("/r")
     assert "http://url.com/r" == composed
 
+    # Simple append
+    client = ReliableHttpClient(Endpoint('http://host/api'), {}, retry_policy)
+    assert client.compose_url('v1/resource') == 'http://host/api/v1/resource'
+
+    # Trailing/Leading slashes
+    assert ReliableHttpClient(Endpoint('http://host/api/'), {}, retry_policy).compose_url('/v1/resource') == 'http://host/api/v1/resource'
+    assert ReliableHttpClient(Endpoint('http://host/api'), {}, retry_policy).compose_url('/v1/resource') == 'http://host/api/v1/resource'
+    assert ReliableHttpClient(Endpoint('http://host/api/'), {}, retry_policy).compose_url('v1/resource') == 'http://host/api/v1/resource'
+
+    # Query Params Merge
+    client = ReliableHttpClient(Endpoint('http://host/api?a=1'), {}, retry_policy)
+    assert client.compose_url('resource?b=2') == 'http://host/api/resource?a=1&b=2'
+    
+    # Query Params Overlap
+    client = ReliableHttpClient(Endpoint('http://host/api?a=1'), {}, retry_policy)
+    assert client.compose_url('resource?a=2') == 'http://host/api/resource?a=1&a=2'
+
+    # Base Root Only
+    assert ReliableHttpClient(Endpoint('http://host/'), {}, retry_policy).compose_url('resource') == 'http://host/resource'
+    assert ReliableHttpClient(Endpoint('http://host'), {}, retry_policy).compose_url('resource') == 'http://host/resource'
+
+    # Relative is Query Only
+    client = ReliableHttpClient(Endpoint('http://host/api'), {}, retry_policy)
+    assert client.compose_url('?foo=bar') == 'http://host/api?foo=bar'
+    
+    # Complex Livy URL
+    base = 'https://api.magnetar.binginternal.com/livy?subcluster=mtprime-prod-mwhe02-1'
+    client = ReliableHttpClient(Endpoint(base), {}, retry_policy)
+    rel = 'sessions/1/log?from=0'
+    expected = 'https://api.magnetar.binginternal.com/livy/sessions/1/log?subcluster=mtprime-prod-mwhe02-1&from=0'
+    assert client.compose_url(rel) == expected
+
 
 def test_get():
     with patch("requests.Session.get") as patched_get:
